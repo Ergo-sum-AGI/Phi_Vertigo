@@ -14,14 +14,14 @@ precision highp float;
 uniform float time;
 uniform vec2  resolution;
 
-const float φ = 1.618033988749895;
-const float π = 3.14159265359;
+const float phi = 1.618033988749895;
+const float pi = 3.14159265359;
 
 vec2 cmul(vec2 a,vec2 b){return vec2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
 
 vec2 goldenSpiral(float k){
-    float r = pow(1.0/φ,k);
-    float a = k*2.0*π/φ + time*1.5;   // faster spin
+    float r = pow(1.0/phi,k);
+    float a = k*2.0*pi/phi + time*1.5;   // faster spin
     return r*vec2(cos(a),sin(a));
 }
 
@@ -37,32 +37,31 @@ float mandelbrot(vec2 c){
     return float(m2<4.0);
 }
 // --- Kaleidoscope mirrors ------------------------------------------
-vec3 kaleido(vec2 uv){
+vec2 kaleido(vec2 uv){
     float angle = atan(uv.y,uv.x);
     float sect  = 6.0;                // 6-fold mandala
-    angle = mod(angle,2.0*π/sect);
-    if(angle>π/sect) angle = 2.0*π/sect - angle;
+    angle = mod(angle,2.0*pi/sect);
+    if(angle>pi/sect) angle = 2.0*pi/sect - angle;
     uv = length(uv)*vec2(cos(angle),sin(angle));
-    return vec3(uv,0);
+    return uv;
 }
 
 void main(){
     vec2 uv = (2.0*gl_FragCoord.xy - resolution.xy)/min(resolution.y,resolution.x);
+    uv = kaleido(uv);
     vec3 col = vec3(0);
 
     // 4 depth layers shrinking into φ-hole
     for(float layer=0.0;layer<4.0;layer+=1.0){
-        float k = layer + log(length(uv))/log(1.0/φ); // log-spiral index
+        float len = max(length(uv), 1e-6);
+        float k = layer + log(len)/log(1.0/phi); // log-spiral index
         vec2  p = goldenSpiral(k);
-        vec2  q = p + uv*pow(φ,layer);                // zoom factor
+        vec2  q = p + uv*pow(phi,layer);                // zoom factor
 
         float bud = mandelbrot(q*4.0);
-        vec3 hue = 0.5 + 0.5*cos(2.0*π*(vec3(0,1,2)/3.0 + k*0.1 + time*0.4));
+        vec3 hue = 0.5 + 0.5*cos(2.0*pi*(vec3(0,1,2)/3.0 + k*0.1 + time*0.4));
         col += bud * hue * exp(-layer*0.5);           // depth fade
     }
-
-    // 6-way mirror
-    col = kaleido(uv).z > 0.0 ? col : kaleido(uv*φ).z > 0.0 ? col.gbr : col.brg;
 
     // breathing star-glow
     col *= 1.0 + 0.3*sin(time*2.0);
