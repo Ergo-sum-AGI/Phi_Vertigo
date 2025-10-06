@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Golden Mandala Vertigo</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script id="vertigo" type="x/glsl">
+#ifdef GL_ES
+precision highp float;
+#endif
+uniform float time;
+uniform vec2  resolution;
+
+const float φ = 1.618033988749895;
+const float π = 3.14159265359;
+
+vec2 cmul(vec2 a,vec2 b){return vec2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
+
+vec2 goldenSpiral(float k){
+    float r = pow(1.0/φ,k);
+    float a = k*2.0*π/φ + time*1.5;   // faster spin
+    return r*vec2(cos(a),sin(a));
+}
+
+// --- Mandelbrot bud on top of the spiral ----------------------------
+float mandelbrot(vec2 c){
+    vec2 z = c*0.6;                   // scale for nice buds
+    float m2 = 0.0;
+    for(int i=0;i<60;i++){
+        if(m2>4.0) break;
+        z = cmul(z,z)+c;
+        m2 = dot(z,z);
+    }
+    return float(m2<4.0);
+}
+// --- Kaleidoscope mirrors ------------------------------------------
+vec3 kaleido(vec2 uv){
+    float angle = atan(uv.y,uv.x);
+    float sect  = 6.0;                // 6-fold mandala
+    angle = mod(angle,2.0*π/sect);
+    if(angle>π/sect) angle = 2.0*π/sect - angle;
+    uv = length(uv)*vec2(cos(angle),sin(angle));
+    return vec3(uv,0);
+}
+
+void main(){
+    vec2 uv = (2.0*gl_FragCoord.xy - resolution.xy)/min(resolution.y,resolution.x);
+    vec3 col = vec3(0);
+
+    // 4 depth layers shrinking into φ-hole
+    for(float layer=0.0;layer<4.0;layer+=1.0){
+        float k = layer + log(length(uv))/log(1.0/φ); // log-spiral index
+        vec2  p = goldenSpiral(k);
+        vec2  q = p + uv*pow(φ,layer);                // zoom factor
+
+        float bud = mandelbrot(q*4.0);
+        vec3 hue = 0.5 + 0.5*cos(2.0*π*(vec3(0,1,2)/3.0 + k*0.1 + time*0.4));
+        col += bud * hue * exp(-layer*0.5);           // depth fade
+    }
+
+    // 6-way mirror
+    col = kaleido(uv).z > 0.0 ? col : kaleido(uv*φ).z > 0.0 ? col.gbr : col.brg;
+
+    // breathing star-glow
+    col *= 1.0 + 0.3*sin(time*2.0);
+    // vignette vertigo
+    col *= smoothstep(1.2,0.3,length(uv));
+    gl_FragColor = vec4(col,1.0);
+}
+</script>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+const vert = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(vert,`attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}`);
+gl.compileShader(vert);
+const frag = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(frag,document.getElementById('vertigo').text);
+gl.compileShader(frag);
+const prog = gl.createProgram();
+gl.attachShader(prog,vert); gl.attachShader(prog,frag); gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+const locP = gl.getAttribLocation(prog,'p');
+gl.enableVertexAttribArray(locP);
+gl.vertexAttribPointer(locP,2,gl.FLOAT,0,0,0);
+
+const uTime = gl.getUniformLocation(prog,'time');
+const uRes  = gl.getUniformLocation(prog,'resolution');
+
+function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; gl.viewport(0,0,innerWidth,innerHeight); }
+resize(); addEventListener('resize',resize);
+
+let start=performance.now();
+function frame(){
+  const t=(performance.now()-start)*0.001;
+  gl.uniform1f(uTime,t);
+  gl.uniform2f(uRes,canvas.width,canvas.height);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
